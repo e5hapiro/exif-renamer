@@ -37,7 +37,8 @@ import shutil
 from pathlib import Path
 
 # --- FIXED ROOT DIRECTORY ---
-ARCHIVE_ROOT = Path("/Volumes/photo/shapfam/")
+#ARCHIVE_ROOT = Path("/Volumes/photo/shapfam/")
+ARCHIVE_ROOT = Path("/Users/edmonds/Pictures/WIP/")
 
 # --- Define the destination folder for renamed files ---
 DEFAULT_DESTINATION = Path("/Users/edmonds/Pictures/to-bb-2/")
@@ -232,10 +233,10 @@ if __name__ == "__main__":
         help="Use the current working directory as the root."
     )
 
+    # The destination is no longer a required parameter.
     parser.add_argument(
         "--destination",
-        required=True,
-        help="The destination directory for the renamed files."
+        help="The destination directory for the renamed files. Defaults to DEFAULT_DESTINATION if not provided."
     )
 
     parser.add_argument("--debug", action="store_true", help="Enable debug mode (print changes, don't write).")
@@ -250,17 +251,25 @@ if __name__ == "__main__":
         print(f"Error: Source directory '{target_dir}' does not exist.")
         exit(1)
 
-    # --- New Logic: Handle destination directory creation ---
-    if args.directory:
-        # Get the name of the subdirectory from the --directory argument
-        directory_name = Path(args.directory).name
-        # Create a new destination path by joining the default destination with the directory name
-        destination_dir = DEFAULT_DESTINATION / directory_name
+    # --- New Logic: Determine the final destination directory ---
+    # First, determine the base destination root.
+    if args.destination:
+        # If a destination is provided, use it.
+        destination_root = Path(args.destination)
     else:
-        # If not using --directory, use the destination provided by the user
-        destination_dir = Path(args.destination)
+        # Otherwise, use the predefined default.
+        destination_root = DEFAULT_DESTINATION
 
-    # Ensure the destination directory exists
+    # Second, check if a subdirectory name needs to be appended.
+    if args.directory:
+        directory_name = Path(args.directory).name
+        # Append the directory name to the destination root.
+        destination_dir = destination_root / directory_name
+    else:
+        # If no --directory is specified, use the destination root as the final destination.
+        destination_dir = destination_root
+    
+    # Ensure the final destination directory exists.
     destination_dir.mkdir(parents=True, exist_ok=True)
     # --- End New Logic ---
 
