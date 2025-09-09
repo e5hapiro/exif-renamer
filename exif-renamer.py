@@ -72,24 +72,23 @@ def get_current_metadata_from_cli(file_path: Path):
 def meets_renaming_criteria(metadata: dict):
     """
     Checks if a file's metadata meets the requirements for renaming.
-    Criteria: must have a non-empty 'Headline' and 'Label' and a valid 'DateTimeOriginal'.
+    Criteria: must have a valid 'DateTimeOriginal', a non-empty 'Headline', and a non-empty 'Label'.
     """
-    # Check for valid metadata fields as per the existing logic.
     datetime_original = metadata.get('DateTimeOriginal')
-    file_type = metadata.get('FileTypeExtension', '').lower()
+    
+    # Condition 1: Check for a valid DateTimeOriginal.
+    date_is_valid = bool(re.match(r'(\d{4}):(\d{2}):(\d{2})', str(datetime_original)))
 
-    # --- New: Check for non-empty Headline and Label fields. ---
+    # Condition 2: Check for non-empty Headline.
     headline = metadata.get('Headline')
-    label = metadata.get('Label')
-
-    # Condition 1: Check that the Headline field exists and is not empty.
     headline_is_valid = bool(headline and isinstance(headline, str) and headline.strip())
     
-    # Condition 2: Check that the Label field exists and is not empty.
+    # Condition 3: Check for non-empty Label.
+    label = metadata.get('Label')
     label_is_valid = bool(label and isinstance(label, str) and label.strip())
     
     # Combined condition: all checks must pass.
-    if datetime_original and headline_is_valid and label_is_valid and file_type in ['jpg', 'jpeg', 'tif', 'tiff', 'nef', 'cr3']:
+    if date_is_valid and headline_is_valid and label_is_valid:
         return True
 
     return False
@@ -107,8 +106,8 @@ def generate_new_filename(metadata: dict, original_path: Path):
     # Sanitize the headline for use in a filename
     sanitized_headline = re.sub(r'[\\/:*?"<>|]', '', headline).replace(' ', '_')
 
-    # Exiftool provides DateTimeOriginal in the format 'YYYY:MM:DD HH:MM:SS'
-    # We want 'YYYYMMDD_HHMMSS' for the filename
+    # Exiftool provides DateTimeOriginal in the format 'YYYY:MM:DD  '
+    # We want 'YYYYMMDD' for the filename
     formatted_date = re.sub(r'[: ]', '', datetime_original).replace(' ', '_')
 
     new_filename = f"{formatted_date}_{sanitized_headline}_{original_filename_stem}{file_suffix}"
