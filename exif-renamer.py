@@ -96,7 +96,7 @@ def meets_renaming_criteria(metadata: dict):
 def generate_new_filename(metadata: dict, original_path: Path):
     """
     Generates the new filename based on the specified metadata format.
-    Format: [Date/Time Original]_[Headline]_[File Name]
+    Format: [Date]_[Headline]_[File Name]
     """
     datetime_original = metadata.get('DateTimeOriginal', 'unknown_date')
     headline = metadata.get('Headline', 'no_headline')
@@ -106,9 +106,16 @@ def generate_new_filename(metadata: dict, original_path: Path):
     # Sanitize the headline for use in a filename
     sanitized_headline = re.sub(r'[\\/:*?"<>|]', '', headline).replace(' ', '_')
 
-    # Exiftool provides DateTimeOriginal in the format 'YYYY:MM:DD  '
-    # We want 'YYYYMMDD' for the filename
-    formatted_date = re.sub(r'[: ]', '', datetime_original).replace(' ', '_')
+    # Exiftool provides DateTimeOriginal in the format 'YYYY:MM:DD HH:MM:SS'
+    # We want to extract only the 'YYYYMMDD' portion for the filename
+    match = re.search(r'(\d{4}:\d{2}:\d{2})', datetime_original)
+    if match:
+        date_only = match.group(1)
+        # Remove colons to get 'YYYYMMDD'
+        formatted_date = re.sub(r'[:]', '', date_only)
+    else:
+        # Fallback if the date format is unexpected
+        formatted_date = 'unknown_date'
 
     new_filename = f"{formatted_date}_{sanitized_headline}_{original_filename_stem}{file_suffix}"
     return new_filename
@@ -171,8 +178,15 @@ def traverse_and_rename(archive_dir, destination_dir, debug: bool = False):
                     if debug:
                         print(f"[DEBUG] Would rename '{file_path.name}' to '{new_filename}'")
                     else:
-                        # Copy and rename the file.
+                        # Copy and rename the main file.
                         copy_and_rename_file(file_path, destination_dir, new_filename)
+
+                        # Check for and copy the XMP sidecar file
+                        xmp_path = file_path.with_suffix('.xmp')
+                        if xmp_path.exists():
+                            new_xmp_filename = Path(new_filename).with_suffix('.xmp')
+                            copy_and_rename_file(xmp_path, destination_dir, new_xmp_filename)
+
                 elif debug:
                     print(f"[DEBUG] Skipping '{file_path.name}' - does not meet renaming criteria.")
 
