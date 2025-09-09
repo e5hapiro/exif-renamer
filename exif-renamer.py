@@ -40,7 +40,7 @@ from pathlib import Path
 ARCHIVE_ROOT = Path("/Volumes/photo/shapfam/")
 
 # --- Define the destination folder for renamed files ---
-DEFAULT_DESTINATION = Path("/Volumes/photo/renamed_photos/")
+DEFAULT_DESTINATION = Path("/Users/edmonds/Pictures/to-bb-2/")
 
 # --- Checkpoint filename ---
 CHECKPOINT_FILENAME = ".processed_marker"
@@ -250,7 +250,19 @@ if __name__ == "__main__":
         print(f"Error: Source directory '{target_dir}' does not exist.")
         exit(1)
 
-    destination_dir = Path(args.destination)
+    # --- New Logic: Handle destination directory creation ---
+    if args.directory:
+        # Get the name of the subdirectory from the --directory argument
+        directory_name = Path(args.directory).name
+        # Create a new destination path by joining the default destination with the directory name
+        destination_dir = DEFAULT_DESTINATION / directory_name
+    else:
+        # If not using --directory, use the destination provided by the user
+        destination_dir = Path(args.destination)
+
+    # Ensure the destination directory exists
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    # --- End New Logic ---
 
     print(f"Processing directory: {target_dir}")
     print(f"Destination directory: {destination_dir}")
