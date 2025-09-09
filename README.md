@@ -1,5 +1,5 @@
 # exif-renamer
-Utilize EXIFTool to identify label and headline and if both tags exist copies file to a new directory
+Utilize EXIFTool to identify label and headline and if both tags exist copies and renames file in a new directory
 
 Purpose
 
