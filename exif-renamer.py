@@ -40,14 +40,74 @@ from pathlib import Path
 
 
 # --- FIXED ROOT DIRECTORY ---
-#ARCHIVE_ROOT = Path("/Volumes/photo/shapfam/")
-ARCHIVE_ROOT = Path("/Users/edmonds/Pictures/")
+SMB_URL = "smb://edmonds@SFDS920/photo"
+VOLUME_PATH = "/Volumes/photo"
+ARCHIVE_ROOT = Path(VOLUME_PATH + "/shapfam/")
+#ARCHIVE_ROOT = Path("/Users/edmonds/Pictures/")
 
 # --- Define the destination folder for renamed files ---
 DEFAULT_DESTINATION = Path("/Users/edmonds/Pictures/to-bb-2/")
 
 # --- Checkpoint filename ---
 CHECKPOINT_FILENAME = ".processed_marker"
+
+
+def is_volume_responsive(volume_path, timeout=5):
+    try:
+        # Try to list the directory with a timeout
+        subprocess.run(['ls', volume_path], timeout=timeout, check=True)
+        return True
+    except subprocess.TimeoutExpired:
+        print(f"Timeout: {volume_path} is unresponsive.")
+        return False
+    except subprocess.CalledProcessError:
+        print(f"Error: Problem accessing {volume_path}.")
+        return False
+
+def force_unmount(volume_path):
+    # Try diskutil force unmount
+    try:
+        subprocess.run(['diskutil', 'unmount', 'force', volume_path], check=True)
+    except subprocess.CalledProcessError:
+        # Try umount -f as fallback
+        subprocess.run(['umount', '-f', volume_path])
+
+def remount_smb(share_url, mount_point):
+    # share_url: "smb://user:pass@server/share"
+    if not os.path.exists(mount_point):
+        os.makedirs(mount_point)
+    subprocess.run(['mount_smbfs', share_url, mount_point])
+
+
+def ensure_photo_volume_mounted(volume_path=VOLUME_PATH, smb_url=SMB_URL):
+    """
+    Ensure the /Volumes/photo/ share is mounted on macOS. 
+    If not, attempt to open/mount it using the SMB URL.
+    """
+    if not os.path.exists(volume_path):
+        print(f"[INFO] {volume_path} not found. Attempting to mount via Finder.")
+        # Use 'open' to prompt Finder to mount the share; replace with correct SMB URL if needed
+        try:
+            # This will prompt for credentials if it's not saved in Keychain
+            subprocess.run(["open", smb_url], check=True)
+            # Wait for the mount to finish
+            print(f"[INFO] Waiting for {volume_path} to become available...")
+            for i in range(20):  # wait up to 10 seconds
+                time.sleep(0.5)
+                if os.path.exists(volume_path):
+                    print(f"[INFO] {volume_path} mounted successfully.")
+                    return True
+            print(f"[ERROR] {volume_path} did not appear after mounting attempt.")
+        except Exception as e:
+            print(f"[ERROR] Failed to mount SMB share: {e}")
+            return False
+    else:
+        print(f"[INFO] {volume_path} is already mounted.")
+        return True
+
+    return os.path.exists(volume_path)
+
+
 
 def get_current_metadata_from_cli(file_path: Path):
     """
@@ -163,12 +223,19 @@ def traverse_and_rename(archive_dir, destination_dir, debug: bool = False, repor
             dirs[:] = []
             continue
 
+        file_count = 0
         for file in files:
+
             # Check for common image/video file extensions.
             if file.lower().endswith((
                 ".nef", ".cr3", ".psd", ".jpg", ".jpeg", ".png", ".tif", ".tiff",
                 ".heic", ".heif", ".dng", ".avif", ".mov", ".mp4"
             )):
+
+                file_count += 1
+                if not debug and file_count % 10 == 0:
+                    print(f"[INFO] Processed {file_count} files in {relative_path}")
+
                 file_path = root_path / file
                 
                 # Get the metadata for the current file.
@@ -320,7 +387,13 @@ if __name__ == "__main__":
     # Ensure the final destination directory exists.
     destination_dir.mkdir(parents=True, exist_ok=True)
     
-    # --- End New Logic ---
+    # --- On SMB root volume may need to be reopened ---
+    if not is_volume_responsive(VOLUME_PATH):
+        force_unmount(VOLUME_PATH)
+    # Ensure the volume is mounted
+    if not ensure_photo_volume_mounted():
+        print("Error: Volume not mounted. Please check your network connection and try again.")
+        exit(1)
 
     print(f"Processing directory: {target_dir}")
     print(f"Destination directory: {destination_dir}")
