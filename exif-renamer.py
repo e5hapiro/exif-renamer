@@ -6,7 +6,7 @@ This script processes image files and copies them to a new destination,
 renaming them based on their EXIF/IPTC metadata.
 
 Author: Edmond Shapiro
-Version: 1.0.1
+Version: 1.0.2
 Created: 9 September 2025
 Last Modified: 18 September 2025
 
@@ -21,9 +21,10 @@ Usage:
 Version History:
     1.0.0 - Initial release
     1.0.1 - Add Report parameter
+    1.0.2 - Write to Report CSV for every directory processed
 """
 
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 __author__ = "Edmond Shapiro"
 __email__ = "eshapiro@gmail.com"
 __license__ = "MIT"
@@ -201,86 +202,100 @@ def copy_and_rename_file(source_path: Path, destination_root: Path, new_filename
         print(f"Error copying file '{source_path}': {e}")
 
 def traverse_and_rename(archive_dir, destination_dir, debug: bool = False, report_filename=None):
+
     """Walk through archive and rename/copy files as needed."""
-    report_rows = []
-    for root, dirs, files in os.walk(archive_dir):
-        root_path = Path(root)
-        try:
-            relative_path = root_path.relative_to(archive_dir)
-        except ValueError:
-            relative_path = Path(".") # Handles case where archive_dir is the current directory.
+    csv_file = None
+    csv_writer = None
+    try:
+        if report_filename:
+            csv_path = destination_dir / report_filename
+            csv_file = open(csv_path, 'a', newline='', encoding='utf-8')
+            csv_writer = csv.writer(csv_file)
+            # Write header only if file is empty
+            if csv_file.tell() == 0:
+                csv_writer.writerow(["Current Filename", "Current Full Path", "Expected New Filename", "Future Full Path"])
 
-        # Check for checkpoint file before processing
-        if is_directory_completed(relative_path, archive_dir):
-            if debug:
-                print(f"[SKIP] Already processed: {relative_path}")
-            dirs[:] = []  # Prevents descending further into this directory
-            continue
-        
-        # New: Skip "received" directories
-        if "received" in str(relative_path).lower():
-            print(f"Skipping subdirectory '{root}' due to 'received' keyword.")
-            dirs[:] = []
-            continue
+        for root, dirs, files in os.walk(archive_dir):
+            root_path = Path(root)
+            try:
+                relative_path = root_path.relative_to(archive_dir)
+            except ValueError:
+                relative_path = Path(".") # Handles case where archive_dir is the current directory.
 
-        file_count = 0
-        for file in files:
+            # Check for checkpoint file before processing
+            if is_directory_completed(relative_path, archive_dir):
+                if debug:
+                    print(f"[SKIP] Already processed: {relative_path}")
+                dirs[:] = []  # Prevents descending further into this directory
+                continue
+            
+            # New: Skip "received" directories
+            if "received" in str(relative_path).lower():
+                print(f"Skipping subdirectory '{root}' due to 'received' keyword.")
+                dirs[:] = []
+                continue
 
-            # Check for common image/video file extensions.
-            if file.lower().endswith((
-                ".nef", ".cr3", ".psd", ".jpg", ".jpeg", ".png", ".tif", ".tiff",
-                ".heic", ".heif", ".dng", ".avif", ".mov", ".mp4"
-            )):
+            file_count = 0
+            local_report_rows = []
 
-                file_count += 1
-                if not debug and file_count % 10 == 0:
-                    print(f"[INFO] Processed {file_count} files in {relative_path}")
+            for file in files:
 
-                file_path = root_path / file
-                
-                # Get the metadata for the current file.
-                metadata = get_current_metadata_from_cli(file_path)
-                
-                # Check if the file meets the criteria for renaming.
-                if meets_renaming_criteria(metadata):
-                    # Generate the new filename.
-                    new_filename = generate_new_filename(metadata, file_path)
+                # Check for common image/video file extensions.
+                if file.lower().endswith((
+                    ".nef", ".cr3", ".psd", ".jpg", ".jpeg", ".png", ".tif", ".tiff",
+                    ".heic", ".heif", ".dng", ".avif", ".mov", ".mp4"
+                )):
+
+                    file_count += 1
+                    if not debug and file_count % 10 == 0:
+                        print(f"[INFO] Processed {file_count} files in {relative_path}")
+
+                    file_path = root_path / file
                     
-                    if debug:
-                        print(f"[DEBUG] Would rename '{file_path.name}' to '{new_filename}'")
-                    if report:
-                        # Populate report row:
-                        report_rows.append([
-                            file_path.name,
-                            str(file_path),
-                            new_filename,
-                            str(destination_dir / new_filename)
-                        ])
-                    else:
-                        # Copy and rename the main file.
-                        copy_and_rename_file(file_path, destination_dir, new_filename)
+                    # Get the metadata for the current file.
+                    metadata = get_current_metadata_from_cli(file_path)
+                    
+                    # Check if the file meets the criteria for renaming.
+                    if meets_renaming_criteria(metadata):
+                        # Generate the new filename.
+                        new_filename = generate_new_filename(metadata, file_path)
+                        
+                        if debug:
+                            print(f"[DEBUG] Would rename '{file_path.name}' to '{new_filename}'")
+                        if report_filename:
+                            # Populate report row:
+                            local_report_rows.append([
+                                file_path.name,
+                                str(file_path),
+                                new_filename,
+                                str(destination_dir / new_filename)
+                            ])
+                        else:
+                            # Copy and rename the main file.
+                            copy_and_rename_file(file_path, destination_dir, new_filename)
 
-                        # Check for and copy the XMP sidecar file
-                        xmp_path = file_path.with_suffix('.xmp')
-                        if xmp_path.exists():
-                            new_xmp_filename = Path(new_filename).with_suffix('.xmp')
-                            copy_and_rename_file(xmp_path, destination_dir, new_xmp_filename)
+                            # Check for and copy the XMP sidecar file
+                            xmp_path = file_path.with_suffix('.xmp')
+                            if xmp_path.exists():
+                                new_xmp_filename = Path(new_filename).with_suffix('.xmp')
+                                copy_and_rename_file(xmp_path, destination_dir, new_xmp_filename)
 
-                elif debug:
-                    print(f"[DEBUG] Skipping '{file_path.name}' - does not meet renaming criteria.")
+                    elif debug:
+                        print(f"[DEBUG] Skipping '{file_path.name}' - does not meet renaming criteria.")
 
-        # Mark directory as completed after all files in it are processed
-        if relative_path != Path("."):
-            mark_directory_completed(relative_path, archive_dir)
+            # Write this directory's report rows before checkpointing
+            if report_filename and local_report_rows:
+                csv_writer.writerows(local_report_rows)
+                csv_file.flush()
 
-    # After traversing, if report is enabled write CSV file
-    if report_filename and report_rows:
-        csv_path = destination_dir / report_filename
-        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(["Current Filename", "Current Full Path", "Expected New Filename", "Future Full Path"])
-            writer.writerows(report_rows)
-        print(f"[INFO] Report written to {csv_path}")
+            # Mark directory as completed after all files in it are processed
+            if relative_path != Path("."):
+                mark_directory_completed(relative_path, archive_dir)
+
+    finally:
+        if csv_file:
+            csv_file.close()
+
 
 
 def is_directory_completed(relative_path: Path, root: Path) -> bool:
