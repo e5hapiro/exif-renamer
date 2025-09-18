@@ -6,9 +6,9 @@ This script processes image files and copies them to a new destination,
 renaming them based on their EXIF/IPTC metadata.
 
 Author: Edmond Shapiro
-Version: 1.0.0
+Version: 1.0.1
 Created: 9 September 2025
-Last Modified: 9 September 2025
+Last Modified: 18 September 2025
 
 Dependencies:
     - exiftool (external command-line tool)
@@ -20,14 +20,16 @@ Usage:
 
 Version History:
     1.0.0 - Initial release
+    1.0.1 - Add Report parameter
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Edmond Shapiro"
 __email__ = "eshapiro@gmail.com"
 __license__ = "MIT"
 __status__ = "Production"
 
+import csv
 import os
 import re
 import json
@@ -36,9 +38,10 @@ import subprocess
 import shutil
 from pathlib import Path
 
+
 # --- FIXED ROOT DIRECTORY ---
 #ARCHIVE_ROOT = Path("/Volumes/photo/shapfam/")
-ARCHIVE_ROOT = Path("/Users/edmonds/Pictures/WIP/")
+ARCHIVE_ROOT = Path("/Users/edmonds/Pictures/")
 
 # --- Define the destination folder for renamed files ---
 DEFAULT_DESTINATION = Path("/Users/edmonds/Pictures/to-bb-2/")
@@ -137,8 +140,9 @@ def copy_and_rename_file(source_path: Path, destination_root: Path, new_filename
     except Exception as e:
         print(f"Error copying file '{source_path}': {e}")
 
-def traverse_and_rename(archive_dir, destination_dir, debug: bool = False):
+def traverse_and_rename(archive_dir, destination_dir, debug: bool = False, report_filename=None):
     """Walk through archive and rename/copy files as needed."""
+    report_rows = []
     for root, dirs, files in os.walk(archive_dir):
         root_path = Path(root)
         try:
@@ -177,6 +181,14 @@ def traverse_and_rename(archive_dir, destination_dir, debug: bool = False):
                     
                     if debug:
                         print(f"[DEBUG] Would rename '{file_path.name}' to '{new_filename}'")
+                    if report:
+                        # Populate report row:
+                        report_rows.append([
+                            file_path.name,
+                            str(file_path),
+                            new_filename,
+                            str(destination_dir / new_filename)
+                        ])
                     else:
                         # Copy and rename the main file.
                         copy_and_rename_file(file_path, destination_dir, new_filename)
@@ -193,6 +205,16 @@ def traverse_and_rename(archive_dir, destination_dir, debug: bool = False):
         # Mark directory as completed after all files in it are processed
         if relative_path != Path("."):
             mark_directory_completed(relative_path, archive_dir)
+
+    # After traversing, if report is enabled write CSV file
+    if report_filename and report_rows:
+        csv_path = destination_dir / report_filename
+        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(["Current Filename", "Current Full Path", "Expected New Filename", "Future Full Path"])
+            writer.writerows(report_rows)
+        print(f"[INFO] Report written to {csv_path}")
+
 
 def is_directory_completed(relative_path: Path, root: Path) -> bool:
     """
@@ -246,6 +268,14 @@ if __name__ == "__main__":
         help="Use the current working directory as the root."
     )
 
+    # Add report argument to parser:
+    parser.add_argument(
+        "--report",
+        action="store_true",
+        help="Generate CSV report of files to be renamed instead of copying them."
+    )
+
+
     # The destination is no longer a required parameter.
     parser.add_argument(
         "--destination",
@@ -282,13 +312,19 @@ if __name__ == "__main__":
         # If no --directory is specified, use the destination root as the final destination.
         destination_dir = destination_root
     
+    report_filename = None    
+    if args.report:
+        base_name = args.directory if args.directory else "rename_report"
+        report_filename = f"{base_name}_report.csv"
+        
     # Ensure the final destination directory exists.
     destination_dir.mkdir(parents=True, exist_ok=True)
+    
     # --- End New Logic ---
 
     print(f"Processing directory: {target_dir}")
     print(f"Destination directory: {destination_dir}")
 
-    traverse_and_rename(target_dir, destination_dir, debug=args.debug)
+    traverse_and_rename(target_dir, destination_dir, debug=args.debug, report_filename=report_filename)
 
     cleanup_checkpoints(target_dir)
