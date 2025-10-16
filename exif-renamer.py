@@ -6,9 +6,9 @@ This script processes image files and copies them to a new destination,
 renaming them based on their EXIF/IPTC metadata.
 
 Author: Edmond Shapiro
-Version: 1.0.2
+Version: 1.0.3
 Created: 9 September 2025
-Last Modified: 18 September 2025
+Last Modified: 16 October 2025
 
 Dependencies:
     - exiftool (external command-line tool)
@@ -22,9 +22,10 @@ Version History:
     1.0.0 - Initial release
     1.0.1 - Add Report parameter
     1.0.2 - Write to Report CSV for every directory processed
+    1.0.3 - Add support for .acr sidecar files
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "Edmond Shapiro"
 __email__ = "eshapiro@gmail.com"
 __license__ = "MIT"
