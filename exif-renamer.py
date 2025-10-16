@@ -274,11 +274,12 @@ def traverse_and_rename(archive_dir, destination_dir, debug: bool = False, repor
                             # Copy and rename the main file.
                             copy_and_rename_file(file_path, destination_dir, new_filename)
 
-                            # Check for and copy the XMP sidecar file
-                            xmp_path = file_path.with_suffix('.xmp')
-                            if xmp_path.exists():
-                                new_xmp_filename = Path(new_filename).with_suffix('.xmp')
-                                copy_and_rename_file(xmp_path, destination_dir, new_xmp_filename)
+                            # Check for and copy sidecar files (.xmp and .acr)
+                            for sidecar_ext in ('.xmp', '.acr'):
+                                sidecar_path = file_path.with_suffix(sidecar_ext)
+                                if sidecar_path.exists():
+                                    new_sidecar_filename = Path(new_filename).with_suffix(sidecar_ext)
+                                    copy_and_rename_file(sidecar_path, destination_dir, new_sidecar_filename)
 
                     elif debug:
                         print(f"[DEBUG] Skipping '{file_path.name}' - does not meet renaming criteria.")
